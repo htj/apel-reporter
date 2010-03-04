@@ -123,10 +123,8 @@ def fetchViewData(view_url, year, month):
 
     month = month if len(month) > 1 else '0' + month
     startkey = '["%(year)s","%(month)s"]' % {YEAR:year, MONTH:month}
-#    startkey = '[%(year)s,%(month)s]' % {YEAR:year, MONTH:month}
     e_year, e_month = nextMonth(year, month)
     endkey = '["%(year)s","%(month)s"]' % {YEAR: e_year, MONTH: e_month}
-#    endkey = '[%(year)s,%(month)s]' % {YEAR: e_year, MONTH: e_month}
 
     path = url.path + '?group=true&startkey=%(startkey)s&endkey=%(endkey)s' % {'startkey': startkey, 'endkey': endkey}
     # example path:
