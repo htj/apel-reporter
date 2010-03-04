@@ -364,10 +364,9 @@ def mergeToTiers(records, tier_mapping, tier_shares):
 
         # we don't split entries if there are less than 10 jobs,
         # as it creates small meaningless entries, which are just noise
-        if match and not rc[N_JOBS] > 10:
+        # also, if ratio is 0 or 1 skip the check as it is meaningless
+        if match and not rc[N_JOBS] > 10 and ratio not in (0,1):
             print "SPLIT AVOIDANCE:", rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE], rc[N_JOBS]
-            if rc[TIER] == 'SE-SNIC-T2':
-                print rc
 
         if match and rc[N_JOBS] > 10:
             #print "SPLIT", rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE], rc[N_JOBS]
