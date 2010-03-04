@@ -1,0 +1,556 @@
+#!/usr/bin/env python
+"""
+Report generator for APEL.
+
+Author: Henrik Thostrup Jensen <htj@ndgf.org>
+Copyright: Nordic Data Grid Facility (2009)
+
+This script is essentially a big back of hacks to form and merge accounting
+data into something that can go into APEL.
+
+
+Usage examples:
+
+./apel-report
+
+Use whatever is defined in config.json and generate report for the current year+month
+
+./apel-report -y 2010 -m 01
+
+Generate report for january 2010
+
+./apel-report -c otherconfig.json
+
+Use otherconfig.json as config file.
+
+./apel-report -v http://localhost:6984/bio_ndgf_org/_design/apel/_view/test1 -y 2009 -m 09
+
+Would generate a report from the above view for september 2009.
+
+./apel-report -v http://localhost:7984/usagerecords/_design/reports/_view/apel -y 2009 -m 12
+
+Would generate a report from the above view for december 2009.
+
+"""
+
+import sys
+import json
+import time
+import urllib
+import urlparse
+import httplib
+import calendar
+import subprocess
+from optparse import OptionParser
+
+
+
+CONFIG_FILE = 'config.json'
+
+NDGF_TIER1   = 'NDGF-T1'
+NORWAY_TIER2 = 'NO-NORGRID-T2'
+SWEDEN_TIER2 = 'SE-SNIC-T2'
+CSC_TIER     = 'CSC' # this is apparently what it is called
+
+ALIEN_USER_PREFIX = '/C=ch/O=AliEn/OU=ALICE/'
+
+# constants for accessing values in records
+TIER      = 'tier'
+HOST      = 'host'
+USERSN    = 'usersn'
+VO_NAME   = 'vo_name'
+VO_ISSUER = 'vo_issuer'
+VO_GROUP  = 'vo_group'
+VO_ROLE   = 'vo_role'
+N_JOBS    = 'n_jobs'
+CPU_DURATION        = 'cpu_duration'
+WALL_DURATION       = 'wall_duration'
+KSI2K_CPU_DURATION  = 'ksi2k_cpu_duration'
+KSI2K_WALL_DURATION = 'ksi2k_wall_duration'
+YEAR       = 'year'
+MONTH      = 'month'
+DATE_START = 'date_start'
+DATE_END   = 'date_end'
+
+
+
+def createParser():
+
+    gmt = time.gmtime()
+    d_year  = str(gmt.tm_year)
+    d_month = str(gmt.tm_mon)
+
+    parser = OptionParser()
+    parser.add_option('-v', '--view',   dest='view_url', help='Database view')
+    parser.add_option('-c', '--config', dest='config',   help='Configuration file',
+                      metavar='FILE', default=CONFIG_FILE )
+    parser.add_option('-y', '--year',   dest='year',     help='Report generation year',  default=d_year)
+    parser.add_option('-m', '--month',  dest='month',    help='Report generation month', default=d_month)
+
+    return parser
+
+
+
+def nMonthDays(year, month):
+
+    if calendar.isleap(int(year)) and month == '02':
+        return 29
+    else:
+        return calendar.mdays[int(month)]
+
+
+
+def nextMonth(year, month):
+
+    i_year = int(year)
+    i_month = int(month)
+
+    if month == 12:
+        e_year = i_year + 1
+        e_month = 1
+    else:
+        e_year = year
+        e_month = i_month + 1
+
+    # return in string format, with 0 padded in front of month if one digit
+    return str(e_year), str(e_month) if e_month >= 10 else '0' + str(e_month)
+
+
+
+def fetchViewData(view_url, year, month):
+
+    url = urlparse.urlparse(view_url)
+
+    month = month if len(month) > 1 else '0' + month
+    startkey = '["%(year)s","%(month)s"]' % {YEAR:year, MONTH:month}
+#    startkey = '[%(year)s,%(month)s]' % {YEAR:year, MONTH:month}
+    e_year, e_month = nextMonth(year, month)
+    endkey = '["%(year)s","%(month)s"]' % {YEAR: e_year, MONTH: e_month}
+#    endkey = '[%(year)s,%(month)s]' % {YEAR: e_year, MONTH: e_month}
+
+    path = url.path + '?group=true&startkey=%(startkey)s&endkey=%(endkey)s' % {'startkey': startkey, 'endkey': endkey}
+    # example path:
+    #path = '''/bio_ndgf_org/_design/apel/_view/test1?group=true&startkey=["2009","09"]&endkey=["2009","10"]'''
+    print path
+
+    conn = httplib.HTTPConnection(url.hostname, url.port)
+    conn.request("GET", path)
+
+    resp = conn.getresponse()
+    if resp.status != 200:
+        print 'Error fetching view data from database. Error code: %s' % resp.status
+        print 'Message:', resp.reason
+        raise SystemExit()
+
+    data = resp.read()
+    response = json.loads(data)
+    return response['rows']
+
+
+
+def rowsToDicts(rows):
+
+    dicts = []
+    for row in rows:
+        year, month, host, usersn, vo_name, vo_issuer, vo_group, vo_role = row['key']
+        n_jobs, cpu_duration, wall_duration = row['value']
+
+        d = {YEAR : year, MONTH : month, HOST : host, USERSN : usersn,
+             VO_NAME : vo_name, VO_ISSUER : vo_issuer, VO_GROUP : vo_group, VO_ROLE : vo_role,
+             N_JOBS : n_jobs, CPU_DURATION : cpu_duration, WALL_DURATION : wall_duration}
+
+        dicts.append(d)
+
+    return dicts
+
+
+
+def cleanData(records):
+    """
+    Does some cleanup of the data in order to make it more "mergeable".
+    """
+    def cleanRecord(record):
+        # the monalisa ur logger reports jobs with alice.cern.ch vo name
+        # the logger should be fixed now, but we keep it anyway
+        if record[VO_NAME] == 'alice.cern.ch':
+            record[VO_NAME] = 'alice'
+        # remove information that is useless anyway
+        if record[VO_ISSUER] and record[VO_ISSUER].startswith('file:///'):
+            record[VO_ISSUER] = None
+        if record[VO_NAME] and (record[VO_NAME].startswith('file:///') or record[VO_NAME].startswith('/etc/')):
+            record[VO_NAME] = None
+        if record[USERSN].startswith(ALIEN_USER_PREFIX):
+            record[VO_NAME] = 'alice'
+            record[USERSN]  = 'aliprod'
+
+        # hack for missing vo info on Andrej - turn them into production jobs which is probably 99% right
+        if record[USERSN] == '/C=SI/O=SiGNET/O=IJS/OU=F9/CN=Andrej Filipcic' and \
+           record[VO_ISSUER] == None and \
+           record[VO_NAME] == None:
+            record[VO_ISSUER] = '/DC=ch/DC=cern/OU=computers/CN=voms.cern.ch'
+            record[VO_NAME]   = 'atlas'
+            record[VO_GROUP]  = 'atlas'
+            record[VO_ROLE]   = 'production'
+
+        return record
+
+    return [ cleanRecord(r) for r in records ]
+
+
+
+def filterData(records):
+    """
+    Filters out "uninteresting" data.
+    """
+    def isInteresting(record):
+        if record[VO_ISSUER] in ('/DC=ch/DC=cern/OU=computers/CN=voms.cern.ch', '/DC=ch/DC=cern/OU=computers/CN=lcg-voms.cern.ch'):
+            return True
+        if record[VO_NAME] in ('atlas', 'cms', 'alice', 'atlas.cern.ch', 'alice.cern.ch'):
+            return True
+        if record[USERSN] == '/C=SI/O=SiGNET/O=IJS/OU=F9/CN=Andrej Filipcic':
+            return True
+        if record[USERSN] == 'aliprod':
+            return True
+        if record[USERSN].startswith(ALIEN_USER_PREFIX):
+            return True
+
+        return False
+
+    return [ r for r in records if isInteresting(r) ]
+
+
+
+def mergeRecords(recs):
+    """
+    Merge two or more records, keeping their base information, but adding count variables.
+    Assumes base information is identical.
+    """
+    def sumfield(dicts, field):
+        fields = [ d[field] for d in dicts ]
+        result = sum(fields) if not None in fields else None
+        return result
+
+    nr = recs[0].copy()
+    nr[N_JOBS]              = sumfield(recs, N_JOBS)
+    nr[CPU_DURATION]        = sumfield(recs, CPU_DURATION)
+    nr[KSI2K_CPU_DURATION]  = sumfield(recs, KSI2K_CPU_DURATION)
+    nr[WALL_DURATION]       = sumfield(recs, WALL_DURATION)
+    nr[KSI2K_WALL_DURATION] = sumfield(recs, KSI2K_WALL_DURATION)
+
+    return nr
+
+
+
+def mergeSimilarRecords(records):
+    """
+    Merge records if the host and user information is similar.
+    """
+
+    idx = {}
+
+    for r in records:
+        key = (r[HOST], r[USERSN], r[VO_NAME], r[VO_GROUP], r[VO_ROLE])
+        idx.setdefault(key, []).append(r)
+
+    merged_records = []
+    for key, recs in idx.items():
+        if len(recs) == 1:
+            mr = recs[0]
+        else:
+            # debug output
+            mr = mergeRecords(recs)
+            if False:
+                print "MERGING:"
+                for r in recs:
+                    for k in sorted(r): print k, ":", r[k], ", ",
+                    print
+                print "-->"
+                for k in sorted(mr): print k, ":", mr[k], ", ",
+                print
+                print "----------------------"
+                print
+
+        # vo issuer is removed in merging, as it is often the reason for merging
+        mr[VO_ISSUER] = None
+        merged_records.append(mr)
+
+    return merged_records
+
+
+
+def addFactors(records, factor):
+    """
+    Add factors for ksi2k scaling for cern reference.
+    """
+    # note: the magic factor for converting specint2000 factors to
+    # ksi2k factors is 4.0
+
+    for r in records:
+        if r[HOST] in factor:
+            r[KSI2K_CPU_DURATION] = r[CPU_DURATION] * factor[r[HOST]]
+            # ksi2k wall time - this makes no sense, but CERN want it
+            r[KSI2K_WALL_DURATION] = r[WALL_DURATION] * factor[r[HOST]]
+        else:
+            warning = "WARNING: No factor for host %s, no KSI2K scaling will be performed" % r[HOST]
+            sys.stderr.write(warning + "\n")
+            r[KSI2K_CPU_DURATION] = None
+            r[KSI2K_WALL_DURATION] = None
+
+    return records
+
+
+
+def mergeToTiers(records, tier_mapping, tier_shares):
+
+    DEFAULT_TIER = NDGF_TIER1
+
+    def mapHostToTier(host):
+        try:
+            return tier_mapping[host]
+        except KeyError:
+            sys.stderr.write("WARNING: No tier mapping for host %s\n" % host)
+        # using heuristic
+        if host.endswith('.no'):
+            tier = NORWAY_TIER2
+        elif host.endswith('.se'):
+            tier = SWEDEN_TIER2
+        elif host.endswith('.fi'):
+            tier = CSC_TIER
+        else:
+            tier = DEFAULT_TIER
+        return tier
+
+
+    def ruleMatch(rule, record):
+        for key, value in rule.items():
+            try:
+                if record[key] != value:
+                    return False
+            except KeyError:
+                return False
+        return True
+
+
+    def applyRatio(record, ratio):
+        nr = {}
+        nr[N_JOBS] = int(record[N_JOBS] * ratio)
+        nr[CPU_DURATION]  = record[CPU_DURATION]  * ratio
+        nr[WALL_DURATION] = record[WALL_DURATION] * ratio
+        nr[KSI2K_CPU_DURATION]  = record[KSI2K_CPU_DURATION]  * ratio if record[KSI2K_CPU_DURATION]  else None
+        nr[KSI2K_WALL_DURATION] = record[KSI2K_WALL_DURATION] * ratio if record[KSI2K_WALL_DURATION] else None
+        return nr
+
+
+    # start of function
+
+    # key: tier, usersn, vo_name, vo_group, vo_role
+    tr = {}
+
+    for r in records:
+
+        host = r[HOST]
+        tier = mapHostToTier(host)
+
+        rc = r.copy()
+        #print rc[HOST], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE]
+        rc[TIER] = tier
+        del rc[HOST]
+
+        match = False
+        for rule, ratio in tier_shares:
+            if ruleMatch(rule, rc):
+                match = True
+                break
+
+        # we don't split entries if there are less than 10 jobs,
+        # as it creates small meaningless entries, which are just noise
+        if match and not rc[N_JOBS] > 10:
+            print "SPLIT AVOIDANCE:", rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE], rc[N_JOBS]
+            if rc[TIER] == 'SE-SNIC-T2':
+                print rc
+
+        if match and rc[N_JOBS] > 10:
+            #print "SPLIT", rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE], rc[N_JOBS]
+            t2_ratio = ratio
+            t1_ratio = 1 - t2_ratio
+
+            base_record = {USERSN  : rc[USERSN],  VO_ISSUER : rc[VO_ISSUER],
+                           VO_NAME : rc[VO_NAME], VO_GROUP  : rc[VO_GROUP],  VO_ROLE : rc[VO_ROLE]}
+
+            if t1_ratio != 0:
+                t1_key = (NDGF_TIER1, rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE])
+                t1r = applyRatio(rc, t1_ratio)
+                t1r[TIER] = t1_key[0]
+                t1r.update(base_record)
+
+                mrs = [ t1r, tr[t1_key] ] if t1_key in tr else [ t1r ]
+                tr[t1_key] = mergeRecords(mrs)
+
+            if t2_ratio != 0:
+                t2_key = (rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE])
+                t2r = applyRatio(rc, t2_ratio)
+                t2r[TIER] = t2_key[0]
+                t2r.update(base_record)
+
+                mrs = [ t2r, tr[t2_key] ] if t2_key in tr else [ t2r ]
+                tr[t2_key] = mergeRecords(mrs)
+
+        else:
+            # add the values to the tier which the entry was mapped to earlier - this might be correct - maybe not
+            r_key = (rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE])
+            mrs = [ rc, tr[r_key] ] if r_key in tr else [ rc ]
+            tr[r_key] = mergeRecords(mrs)
+
+    return tr.values()
+
+
+
+def encryptUserSN(usersn):
+
+    cmd = './crypt'
+    args = [cmd, usersn]
+
+    p = subprocess.Popen(args, stdout=subprocess.PIPE)
+    p.wait()
+    encrypted_usersn = p.stdout.read().strip()
+
+    return encrypted_usersn
+
+
+
+def encryptEntries(entries):
+    """
+    Encrypts the usersn in entries, as required by APEL.
+    """
+    print "Encrypting %i entries." % len(entries)
+
+    encrypted_entries = []
+
+    for entry in entries:
+        ec = entry.copy()
+        ec['usersn'] = encryptUserSN(entry['usersn'])
+        encrypted_entries.append(ec)
+        sys.stdout.write('.')
+        sys.stdout.flush()
+
+    print
+    return encrypted_entries
+
+
+
+def formatRecord(record, year, month, date_start, date_end):
+    """
+    Given a record and auxillary information, this function returns a string
+    containing a row suitable for insertion into APEL.
+    """
+
+    addQuotes = lambda s : '"' + s + '"'
+
+    rd = {}
+
+    rd[HOST]                = addQuotes(record[HOST])      if HOST in record    else addQuotes(record[TIER])
+    rd[USERSN]              = addQuotes(record[USERSN])
+    rd[VO_ISSUER]           = addQuotes(record[VO_ISSUER]) if record[VO_ISSUER] else 'null'
+    rd[VO_NAME]             = addQuotes(record[VO_NAME])   if record[VO_NAME]   else 'null'
+    rd[VO_GROUP]            = addQuotes(record[VO_GROUP])  if record[VO_GROUP]  else 'null'
+    rd[VO_ROLE]             = addQuotes(record[VO_ROLE])   if record[VO_ROLE]   else 'null'
+    rd[N_JOBS]              = record[N_JOBS]
+    rd[CPU_DURATION]        = int(record[CPU_DURATION])
+    rd[WALL_DURATION]       = int(record[WALL_DURATION])
+    rd[KSI2K_CPU_DURATION]  = int(record[KSI2K_CPU_DURATION])  if record[KSI2K_CPU_DURATION]  else 'null'
+    rd[KSI2K_WALL_DURATION] = int(record[KSI2K_WALL_DURATION]) if record[KSI2K_WALL_DURATION] else 'null'
+    rd[MONTH]               = month
+    rd[YEAR]                = year
+    rd[DATE_START]          = addQuotes(date_start)
+    rd[DATE_END]            = addQuotes(date_end)
+
+    # for debugging, with vo issuer
+#    base = '''%(host)s %(usersn)s\n   %(vo_issuer)s %(vo_name)s %(vo_group)s %(vo_role)s\n   ''' + \
+#           '''%(n_jobs)i %(cpu_duration)i %(ksi2k_cpu_duration)i %(wall_duration)i %(ksi2k_wall_duration)i \t\t ''' + \
+#           '''%(month)s %(year)s %(date_start)s %(date_end)s'''
+
+    # for debugging
+#    base = '''%(host)s %(usersn)s %(vo_name)s %(vo_group)s %(vo_role)s\n''' + \
+#           '''%(n_jobs)i %(cpu_duration)i %(ksi2k_cpu_duration)s %(wall_duration)i %(ksi2k_wall_duration)s \t\t ''' + \
+#           '''%(month)s %(year)s %(date_start)s %(date_end)s\n'''
+
+    # db entry, short/debug
+#    base = '''%(host)s, %(usersn)s, %(vo_name)s, %(vo_group)s, %(vo_role)s,\n''' + \
+#           '''   %(n_jobs)i, %(cpu_duration)i, %(ksi2k_cpu_duration)s, %(wall_duration)i, %(ksi2k_wall_duration)s'''
+
+    # proper db entry, full
+    base = '''%(host)s, %(vo_name)s, %(usersn)s, %(vo_group)s, %(vo_role)s, ''' + \
+           '''%(n_jobs)i, %(cpu_duration)i, %(ksi2k_cpu_duration)s, %(wall_duration)i, %(ksi2k_wall_duration)s, ''' + \
+           '''%(month)s, %(year)s, %(date_start)s, %(date_end)s'''
+
+    s = base % rd
+    return s
+
+
+
+def loadConfig(filename=CONFIG_FILE):
+
+    f = open(filename)
+    try:
+        cfg = json.load(f)
+    except ValueError, e:
+        print "Error parsing config file (%s)" % str(e)
+        sys.exit(2)
+
+    f.close()
+    return cfg
+
+
+
+def main():
+
+    parser = createParser()
+    options, args = parser.parse_args()
+
+    if args:
+        print "Auxillary arguments (%s) not understood, exiting." % ','.join(args)
+        sys.exit(1)
+
+    cfg = loadConfig(options.config)
+    factor, tier_mapping, tier_share = cfg['factor'], cfg['tier-2'], cfg['share']
+
+    view_url = options.view_url or cfg.get('view')
+    if view_url is None:
+        print "View url not defined in config file nor defined on command line"
+        sys.exit(1)
+
+    year  = options.year
+    month = options.month
+
+    # options ready, start data fetching
+
+    print "Fetching data from view"
+    rows = fetchViewData(view_url, year, month)
+    print "Got view data, performing hacky data manipulation"
+    records = rowsToDicts(rows)
+    records = cleanData(records)
+    records = filterData(records)
+    records = addFactors(records, factor)
+
+    records = mergeSimilarRecords(records)
+
+    date_start = '%s-%s-%s' % (year, month, '1')
+    date_end   = '%s-%s-%s' % (year, month, nMonthDays(year, month))
+    #for r in sorted(records):
+    #    s = formatRecord(r, year, month, date_start, date_end)
+    #    print s
+
+    entries = mergeToTiers(records, tier_mapping, tier_share)
+#    entries = encryptEntries(entries)
+
+    #print "----------------------------------"
+    ent_cmp = lambda r1, r2: cmp( (r1[TIER], r1[VO_NAME], r1[USERSN]), (r2[TIER], r2[VO_NAME], r2[USERSN]) )
+    for e in sorted(entries, ent_cmp):
+        s = formatRecord(e, year, month, date_start, date_end)
+        print s
+
+
+
+if __name__ == '__main__':
+    main()
+
