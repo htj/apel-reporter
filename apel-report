@@ -72,6 +72,8 @@ MONTH      = 'month'
 DATE_START = 'date_start'
 DATE_END   = 'date_end'
 
+# a global to avoid us spamming missing scale factors
+FACTOR_HOST_WARNINGS = {}
 
 
 def createParser():
@@ -276,7 +278,7 @@ def mergeSimilarRecords(records):
 
 
 
-def addFactors(records, factor):
+def addFactors(records, factor, factor_host_warnings=FACTOR_HOST_WARNINGS):
     """
     Add factors for ksi2k scaling for cern reference.
     """
@@ -289,8 +291,10 @@ def addFactors(records, factor):
             # ksi2k wall time - this makes no sense, but CERN want it
             r[KSI2K_WALL_DURATION] = r[WALL_DURATION] * factor[r[HOST]]
         else:
-            warning = "WARNING: No factor for host %s, no KSI2K scaling will be performed" % r[HOST]
-            sys.stderr.write(warning + "\n")
+            if not r[HOST] in factor_host_warnings:
+                warning = "WARNING: No factor for host %s, no KSI2K scaling will be performed" % r[HOST]
+                sys.stderr.write(warning + "\n")
+                factor_host_warnings[r[HOST]] = True
             r[KSI2K_CPU_DURATION] = None
             r[KSI2K_WALL_DURATION] = None
 
