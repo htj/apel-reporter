@@ -129,17 +129,15 @@ def fetchViewData(view_url, year, month):
     endkey = '["%(year)s","%(month)s"]' % {YEAR: e_year, MONTH: e_month}
 
     path = url.path + '?group=true&startkey=%(startkey)s&endkey=%(endkey)s' % {'startkey': startkey, 'endkey': endkey}
-    # example path:
-    #path = '''/bio_ndgf_org/_design/apel/_view/test1?group=true&startkey=["2009","09"]&endkey=["2009","10"]'''
-    print path
+    # example path: '''/bio_ndgf_org/_design/apel/_view/test1?group=true&startkey=["2009","09"]&endkey=["2009","10"]'''
 
     conn = httplib.HTTPConnection(url.hostname, url.port)
     conn.request("GET", path)
 
     resp = conn.getresponse()
     if resp.status != 200:
-        print 'Error fetching view data from database. Error code: %s' % resp.status
-        print 'Message:', resp.reason
+        print >> sys.stderr, 'Error fetching view data from database. Error code: %s' % resp.status
+        print >> sys.stderr, 'Message:', resp.reason
         raise SystemExit()
 
     data = resp.read()
@@ -292,8 +290,7 @@ def addFactors(records, factor, factor_host_warnings=FACTOR_HOST_WARNINGS):
             r[KSI2K_WALL_DURATION] = r[WALL_DURATION] * factor[r[HOST]]
         else:
             if not r[HOST] in factor_host_warnings:
-                warning = "WARNING: No factor for host %s, no KSI2K scaling will be performed" % r[HOST]
-                sys.stderr.write(warning + "\n")
+                print >> sys.stderr, "WARNING: No factor for host %s, no KSI2K scaling will be performed" % r[HOST]
                 factor_host_warnings[r[HOST]] = True
             r[KSI2K_CPU_DURATION] = None
             r[KSI2K_WALL_DURATION] = None
@@ -310,7 +307,7 @@ def mergeToTiers(records, tier_mapping, tier_shares):
         try:
             return tier_mapping[host]
         except KeyError:
-            sys.stderr.write("WARNING: No tier mapping for host %s\n" % host)
+            print >> sys.stderr, "WARNING: No tier mapping for host %s" % host
         # using heuristic
         if host.endswith('.no'):
             tier = NORWAY_TIER2
@@ -368,7 +365,7 @@ def mergeToTiers(records, tier_mapping, tier_shares):
         # as it creates small meaningless entries, which are just noise
         # also, if ratio is 0 or 1 skip the check as it is meaningless
         if match and not rc[N_JOBS] > 10 and ratio not in (0,1):
-            print "SPLIT AVOIDANCE:", rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE], rc[N_JOBS]
+            print >> sys.stderr, "SPLIT AVOIDANCE:", rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE], rc[N_JOBS]
 
         if match and rc[N_JOBS] > 10:
             #print "SPLIT", rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE], rc[N_JOBS]
@@ -423,7 +420,7 @@ def encryptEntries(entries):
     """
     Encrypts the usersn in entries, as required by APEL.
     """
-    print "Encrypting %i entries." % len(entries)
+    print >> sys.stderr, "Encrypting %i entries." % len(entries)
 
     encrypted_entries = []
 
@@ -434,7 +431,6 @@ def encryptEntries(entries):
         sys.stdout.write('.')
         sys.stdout.flush()
 
-    print
     return encrypted_entries
 
 
@@ -495,7 +491,7 @@ def loadConfig(filename=CONFIG_FILE):
     try:
         cfg = json.load(f)
     except ValueError, e:
-        print "Error parsing config file (%s)" % str(e)
+        print >> sys.stderr, "Error parsing config file (%s)" % str(e)
         sys.exit(2)
 
     f.close()
@@ -509,7 +505,7 @@ def main():
     options, args = parser.parse_args()
 
     if args:
-        print "Auxillary arguments (%s) not understood, exiting." % ','.join(args)
+        print >> sys.stderr, "Auxillary arguments (%s) not understood, exiting." % ','.join(args)
         sys.exit(1)
 
     cfg = loadConfig(options.config)
@@ -517,7 +513,7 @@ def main():
 
     view_url = options.view_url or cfg.get('view')
     if view_url is None:
-        print "View url not defined in config file nor defined on command line"
+        print >> sys.stderr, "View url not defined in config file nor defined on command line"
         sys.exit(1)
 
     year  = options.year
@@ -525,9 +521,9 @@ def main():
 
     # options ready, start data fetching
 
-    print "Fetching data from view"
+    print >> sys.stderr, "Fetching data from view"
     rows = fetchViewData(view_url, year, month)
-    print "Got view data, performing hacky data manipulation"
+    print >> sys.stderr, "Got view data, performing hacky data manipulation"
     records = rowsToDicts(rows)
     records = cleanData(records)
     records = filterData(records)
