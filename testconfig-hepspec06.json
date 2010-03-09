@@ -1,0 +1,53 @@
+{
+    "view"   : "http://localhost:7984/usagerecords/_design/reports/_view/apel",
+
+    "factor" : {
+        "jeannedarc.hpc2n.umu.se"       : 2.4175,
+        "arc-ce01.pdc.kth.se"           : 2.3025,
+        "arc-ce.smokerings.nsc.liu.se"  : 2.4325,
+        "alien-ce.smokerings.nsc.liu.se": 2.4325
+    },
+
+    "tier-2" : {
+        "ce01.titan.uio.no"             : "NO-NORGRID-T2",
+        "ce02.titan.uio.no"             : "NO-NORGRID-T2",
+        "arc.bccs.uib.no"               : "NO-NORGRID-T2",
+        "grid.bccs.uib.no"              : "NO-NORGRID-T2",
+        "norgrid.bccs.no"               : "NO-NORGRID-T2",
+        "grid.uio.no"                   : "NO-NORGRID-T2",
+
+        "ingrid-h.hpc2n.umu.se"         : "SE-SNIC-T2",
+        "ingrid-i.hpc2n.umu.se"         : "SE-SNIC-T2",
+        "siri.lunarc.lu.se"             : "SE-SNIC-T2",
+        "svea.c3se.chalmers.se"         : "SE-SNIC-T2",
+        "arc-ce.smokerings.nsc.liu.se"  : "SE-SNIC-T2",
+        "jeannedarc.hpc2n.umu.se"       : "SE-SNIC-T2",
+        "grad1.uppmax.uu.se"            : "SE-SNIC-T2",
+        "arc-ce01.pdc.kth.se"           : "SE-SNIC-T2",
+        "grad.uppmax.uu.se"             : "SE-SNIC-T2",
+
+        "fyrgrid.grid.aau.dk"           : "NDGF-T1",
+
+        "sepeli.csc.fi"                 : "CSC",
+        "ametisti.grid.helsinki.fi"     : "CSC",
+        "korundi.grid.helsinki.fi"      : "CSC",
+
+        "alice.lunarc.lu.se"            : "SE-SNIC-T2",
+        "alien-ce.smokerings.nsc.liu.se": "SE-SNIC-T2",
+
+        "LUNARC"                        : "SE-SNIC-T2",
+        "NSC"                           : "SE-SNIC-T2",
+        "UiB"                           : "NO-NORGRID-T2"
+    },
+
+    "share" : [
+        [{"tier": "NO-NORGRID-T2", "vo_name": "atlas", "vo_role": "production"}, 0.38],
+        [{"tier": "NO-NORGRID-T2", "vo_name": "alice"}                         , 0   ],
+        [{"tier": "SE-SNIC-T2",    "vo_name": "atlas", "vo_role": "production"}, 0.49],
+        [{"tier": "SE-SNIC-T2",    "vo_name": "alice"}                         , 0.49],
+        [{"tier": "CSC",           "vo_name": "cms"}                           , 1]
+    ]
+
+}
+
+
