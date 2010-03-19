@@ -1,11 +1,15 @@
 {
-    "view"   : "http://localhost:7984/usagerecords/_design/reports/_view/apel",
+    "view"   : "http://localhost:7984/usagerecords-2/_design/reports/_view/apel",
 
     "factor" : {
         "jeannedarc.hpc2n.umu.se"       : 2.4175,
         "arc-ce01.pdc.kth.se"           : 2.3025,
         "arc-ce.smokerings.nsc.liu.se"  : 2.4325,
-        "alien-ce.smokerings.nsc.liu.se": 2.4325
+        "alien-ce.smokerings.nsc.liu.se": 2.4325,
+        "ce01.titan.uio.no"             : 2.7425,
+        "ce02.titan.uio.no"             : 2.7425,
+        "sepeli.csc.fi"                 : 1.93,
+        "jade.csc.fi"                   : 2.5675
     },
 
     "tier-2" : {
