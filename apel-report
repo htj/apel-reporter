@@ -23,6 +23,10 @@ Generate report for january 2010
 
 Use otherconfig.json as config file.
 
+./apel-report -t
+
+Generate tier report.
+
 ./apel-report -v http://localhost:6984/bio_ndgf_org/_design/apel/_view/test1 -y 2009 -m 09
 
 Would generate a report from the above view for september 2009.
@@ -83,11 +87,11 @@ def createParser():
     d_month = str(gmt.tm_mon)
 
     parser = OptionParser()
-    parser.add_option('-v', '--view',   dest='view_url', help='Database view')
-    parser.add_option('-c', '--config', dest='config',   help='Configuration file',
-                      metavar='FILE', default=CONFIG_FILE )
-    parser.add_option('-y', '--year',   dest='year',     help='Report generation year',  default=d_year)
-    parser.add_option('-m', '--month',  dest='month',    help='Report generation month', default=d_month)
+    parser.add_option('-t', '--tier',   dest='tierreport', help='Generate tier report', default=False, action='store_true')
+    parser.add_option('-v', '--view',   dest='view_url',   help='Database view')
+    parser.add_option('-c', '--config', dest='config',     help='Configuration file', metavar='FILE', default=CONFIG_FILE )
+    parser.add_option('-y', '--year',   dest='year',       help='Report generation year',  default=d_year)
+    parser.add_option('-m', '--month',  dest='month',      help='Report generation month', default=d_month)
 
     return parser
 
@@ -239,7 +243,7 @@ def mergeRecords(recs):
 
 
 
-def mergeSimilarRecords(records):
+def mergeSimilarRecords(records, tier_report=False):
     """
     Merge records if the host and user information is similar.
     """
@@ -247,7 +251,11 @@ def mergeSimilarRecords(records):
     idx = {}
 
     for r in records:
-        key = (r[HOST], r[USERSN], r[VO_NAME], r[VO_GROUP], r[VO_ROLE])
+        if tier_report:
+            key = (r[HOST], r[VO_NAME], r[VO_ROLE])
+            r.pop(USERSN, None) ; r.pop(VO_GROUP, None)
+        else:
+            key = (r[HOST], r[USERSN], r[VO_NAME], r[VO_GROUP], r[VO_ROLE])
         idx.setdefault(key, []).append(r)
 
     merged_records = []
@@ -283,6 +291,8 @@ def addFactors(records, factor, factor_host_warnings=FACTOR_HOST_WARNINGS):
     # note: the magic factor for converting specint2000 factors to
     # ksi2k factors is 4.0
 
+    UNKNOWN_FACTOR = 1.75
+
     for r in records:
         if r[HOST] in factor:
             r[KSI2K_CPU_DURATION] = r[CPU_DURATION] * factor[r[HOST]]
@@ -290,16 +300,16 @@ def addFactors(records, factor, factor_host_warnings=FACTOR_HOST_WARNINGS):
             r[KSI2K_WALL_DURATION] = r[WALL_DURATION] * factor[r[HOST]]
         else:
             if not r[HOST] in factor_host_warnings:
-                print >> sys.stderr, "WARNING: No factor for host %s, no KSI2K scaling will be performed" % r[HOST]
+                print >> sys.stderr, "WARNING: No factor for host %s, using %f as scale factor" % (r[HOST], UNKNOWN_FACTOR)
                 factor_host_warnings[r[HOST]] = True
-            r[KSI2K_CPU_DURATION] = None
-            r[KSI2K_WALL_DURATION] = None
+            r[KSI2K_CPU_DURATION] = r[CPU_DURATION] * UNKNOWN_FACTOR
+            r[KSI2K_WALL_DURATION] =  r[WALL_DURATION] * UNKNOWN_FACTOR
 
     return records
 
 
 
-def mergeToTiers(records, tier_mapping, tier_shares):
+def mergeToTiers(records, tier_mapping, tier_shares, tier_report=False):
 
     DEFAULT_TIER = NDGF_TIER1
 
@@ -342,7 +352,7 @@ def mergeToTiers(records, tier_mapping, tier_shares):
 
     # start of function
 
-    # key: tier, usersn, vo_name, vo_group, vo_role
+    # key: tier, usersn, vo_name, vo_group, vo_role / tier, vo_name
     tr = {}
 
     for r in records:
@@ -361,22 +371,39 @@ def mergeToTiers(records, tier_mapping, tier_shares):
                 match = True
                 break
 
+        # apply fucked splitting of entries - just for atlas though
+        #if rc[VO_NAME] in ('atlas', 'cms'):
+        if tier_report:
+            if rc[VO_NAME] == 'atlas':
+                if rc[VO_ROLE] == 'production':
+                    rc[VO_NAME] = rc[VO_NAME] + '-prod'
+                else:
+                    rc[VO_NAME] = rc[VO_NAME] + '-user'
+            rc.pop(VO_ROLE, None)
+
         # we don't split entries if there are less than 10 jobs,
         # as it creates small meaningless entries, which are just noise
         # also, if ratio is 0 or 1 skip the check as it is meaningless
         if match and not rc[N_JOBS] > 10 and ratio not in (0,1):
-            print >> sys.stderr, "SPLIT AVOIDANCE:", rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE], rc[N_JOBS]
+            #print >> sys.stderr, "SPLIT AVOIDANCE:", rc.get(TIER), rc.get(VO_NAME), rc.get(USERSN), rc.get(VO_GROUP), rc.get(VO_ROLE), rc.get(N_JOBS)
+            pass
 
         if match and rc[N_JOBS] > 10:
             #print "SPLIT", rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE], rc[N_JOBS]
             t2_ratio = ratio
             t1_ratio = 1 - t2_ratio
 
-            base_record = {USERSN  : rc[USERSN],  VO_ISSUER : rc[VO_ISSUER],
-                           VO_NAME : rc[VO_NAME], VO_GROUP  : rc[VO_GROUP],  VO_ROLE : rc[VO_ROLE]}
+            if tier_report:
+                base_record = {VO_NAME : rc[VO_NAME] }
+            else:
+                base_record = {USERSN  : rc[USERSN],  VO_ISSUER : rc[VO_ISSUER],
+                               VO_NAME : rc[VO_NAME], VO_GROUP  : rc[VO_GROUP],  VO_ROLE : rc[VO_ROLE]}
 
             if t1_ratio != 0:
-                t1_key = (NDGF_TIER1, rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE])
+                if tier_report:
+                    t1_key = (NDGF_TIER1, rc[VO_NAME])
+                else:
+                    t1_key = (NDGF_TIER1, rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE])
                 t1r = applyRatio(rc, t1_ratio)
                 t1r[TIER] = t1_key[0]
                 t1r.update(base_record)
@@ -385,7 +412,10 @@ def mergeToTiers(records, tier_mapping, tier_shares):
                 tr[t1_key] = mergeRecords(mrs)
 
             if t2_ratio != 0:
-                t2_key = (rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE])
+                if tier_report:
+                    t2_key = (rc[TIER], rc[VO_NAME])
+                else:
+                    t2_key = (rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE])
                 t2r = applyRatio(rc, t2_ratio)
                 t2r[TIER] = t2_key[0]
                 t2r.update(base_record)
@@ -395,7 +425,10 @@ def mergeToTiers(records, tier_mapping, tier_shares):
 
         else:
             # add the values to the tier which the entry was mapped to earlier - this might be correct - maybe not
-            r_key = (rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE])
+            if tier_report:
+                r_key = (rc[TIER], rc[VO_NAME])
+            else:
+                r_key = (rc[TIER], rc[USERSN], rc[VO_NAME], rc[VO_GROUP], rc[VO_ROLE])
             mrs = [ rc, tr[r_key] ] if r_key in tr else [ rc ]
             tr[r_key] = mergeRecords(mrs)
 
@@ -435,7 +468,7 @@ def encryptEntries(entries):
 
 
 
-def formatRecord(record, year, month, date_start, date_end):
+def formatRecord(record, year, month, date_start, date_end, tier_report=False):
     """
     Given a record and auxillary information, this function returns a string
     containing a row suitable for insertion into APEL.
@@ -446,11 +479,12 @@ def formatRecord(record, year, month, date_start, date_end):
     rd = {}
 
     rd[HOST]                = addQuotes(record[HOST])      if HOST in record    else addQuotes(record[TIER])
-    rd[USERSN]              = addQuotes(record[USERSN])
-    rd[VO_ISSUER]           = addQuotes(record[VO_ISSUER]) if record[VO_ISSUER] else 'null'
     rd[VO_NAME]             = addQuotes(record[VO_NAME])   if record[VO_NAME]   else 'null'
-    rd[VO_GROUP]            = addQuotes(record[VO_GROUP])  if record[VO_GROUP]  else 'null'
-    rd[VO_ROLE]             = addQuotes(record[VO_ROLE])   if record[VO_ROLE]   else 'null'
+    if not tier_report:
+        rd[USERSN]              = addQuotes(record[USERSN])
+        rd[VO_ISSUER]           = addQuotes(record[VO_ISSUER]) if record[VO_ISSUER] else 'null'
+        rd[VO_GROUP]            = addQuotes(record[VO_GROUP])  if record[VO_GROUP]  else 'null'
+        rd[VO_ROLE]             = addQuotes(record[VO_ROLE])   if record[VO_ROLE]   else 'null'
     rd[N_JOBS]              = record[N_JOBS]
     rd[CPU_DURATION]        = int(record[CPU_DURATION])
     rd[WALL_DURATION]       = int(record[WALL_DURATION])
@@ -476,9 +510,14 @@ def formatRecord(record, year, month, date_start, date_end):
 #           '''   %(n_jobs)i, %(cpu_duration)i, %(ksi2k_cpu_duration)s, %(wall_duration)i, %(ksi2k_wall_duration)s'''
 
     # proper db entry, full
-    base = '''%(host)s, %(vo_name)s, %(usersn)s, %(vo_group)s, %(vo_role)s, ''' + \
-           '''%(n_jobs)i, %(cpu_duration)i, %(ksi2k_cpu_duration)s, %(wall_duration)i, %(ksi2k_wall_duration)s, ''' + \
-           '''%(month)s, %(year)s, %(date_start)s, %(date_end)s'''
+    if tier_report:
+        base = '''%(host)s, %(vo_name)s, ''' + \
+               '''%(n_jobs)i, %(cpu_duration)i, %(ksi2k_cpu_duration)s, %(wall_duration)i, %(ksi2k_wall_duration)s, ''' + \
+               '''%(month)s, %(year)s, %(date_start)s, %(date_end)s'''
+    else:
+        base = '''%(host)s, %(vo_name)s, %(usersn)s, %(vo_group)s, %(vo_role)s, ''' + \
+               '''%(n_jobs)i, %(cpu_duration)i, %(ksi2k_cpu_duration)s, %(wall_duration)i, %(ksi2k_wall_duration)s, ''' + \
+               '''%(month)s, %(year)s, %(date_start)s, %(date_end)s'''
 
     s = base % rd
     return s
@@ -516,6 +555,7 @@ def main():
         print >> sys.stderr, "View url not defined in config file nor defined on command line"
         sys.exit(1)
 
+    tier_report = options.tierreport
     year  = options.year
     month = options.month
 
@@ -529,7 +569,7 @@ def main():
     records = filterData(records)
     records = addFactors(records, factor)
 
-    records = mergeSimilarRecords(records)
+    records = mergeSimilarRecords(records, tier_report=tier_report)
 
     date_start = '%s-%s-%s' % (year, month, '1')
     date_end   = '%s-%s-%s' % (year, month, nMonthDays(year, month))
@@ -537,13 +577,14 @@ def main():
     #    s = formatRecord(r, year, month, date_start, date_end)
     #    print s
 
-    entries = mergeToTiers(records, tier_mapping, tier_share)
-#    entries = encryptEntries(entries)
+    entries = mergeToTiers(records, tier_mapping, tier_share, tier_report=tier_report)
+#    if not tier_report:
+#        entries = encryptEntries(entries)
 
-    #print "----------------------------------"
-    ent_cmp = lambda r1, r2: cmp( (r1[TIER], r1[VO_NAME], r1[USERSN]), (r2[TIER], r2[VO_NAME], r2[USERSN]) )
+    ent_cmp = lambda r1, r2: cmp( (r1.get(TIER), r1.get(VO_NAME), r1.get(USERSN)),
+                                  (r2.get(TIER), r2.get(VO_NAME), r2.get(USERSN)) )
     for e in sorted(entries, ent_cmp):
-        s = formatRecord(e, year, month, date_start, date_end)
+        s = formatRecord(e, year, month, date_start, date_end, tier_report=tier_report)
         print s
 
 
