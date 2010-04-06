@@ -179,7 +179,7 @@ def cleanData(records):
         # remove information that is useless anyway
         if record[VO_ISSUER] and record[VO_ISSUER].startswith('file:///'):
             record[VO_ISSUER] = None
-        if record[VO_NAME] and (record[VO_NAME].startswith('file:///') or record[VO_NAME].startswith('/etc/')):
+        if record[VO_NAME] and (record[VO_NAME].startswith('file:///') or record[VO_NAME].startswith('/')):
             record[VO_NAME] = None
         if record[USERSN].startswith(ALIEN_USER_PREFIX):
             record[VO_NAME] = 'alice'
