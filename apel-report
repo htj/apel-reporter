@@ -474,7 +474,7 @@ def formatRecord(record, year, month, date_start, date_end, tier_report=False):
     containing a row suitable for insertion into APEL.
     """
 
-    addQuotes = lambda s : '"' + s + '"'
+    addQuotes = lambda s : "'" + s + "'"
 
     rd = {}
 
