@@ -497,16 +497,6 @@ def formatRecord(record, year, month, date_start, date_end, tier_report=False):
     rd[DATE_START]          = addQuotes(date_start)
     rd[DATE_END]            = addQuotes(date_end)
 
-    # for debugging, with vo issuer
-#    base = '''%(host)s %(usersn)s\n   %(vo_issuer)s %(vo_name)s %(vo_group)s %(vo_role)s\n   ''' + \
-#           '''%(n_jobs)i %(cpu_duration)i %(ksi2k_cpu_duration)i %(wall_duration)i %(ksi2k_wall_duration)i \t\t ''' + \
-#           '''%(month)s %(year)s %(date_start)s %(date_end)s'''
-
-    # for debugging
-#    base = '''%(host)s %(usersn)s %(vo_name)s %(vo_group)s %(vo_role)s\n''' + \
-#           '''%(n_jobs)i %(cpu_duration)i %(ksi2k_cpu_duration)s %(wall_duration)i %(ksi2k_wall_duration)s \t\t ''' + \
-#           '''%(month)s %(year)s %(date_start)s %(date_end)s\n'''
-
     # db entry, short/debug
 #    base = '''%(host)s, %(usersn)s, %(vo_name)s, %(vo_group)s, %(vo_role)s,\n''' + \
 #           '''   %(n_jobs)i, %(cpu_duration)i, %(ksi2k_cpu_duration)s, %(wall_duration)i, %(ksi2k_wall_duration)s'''
