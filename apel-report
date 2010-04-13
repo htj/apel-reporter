@@ -76,6 +76,8 @@ MONTH      = 'month'
 DATE_START = 'date_start'
 DATE_END   = 'date_end'
 
+SECONDS_PER_HOUR = 60 * 60
+
 # a global to avoid us spamming missing scale factors
 FACTOR_HOST_WARNINGS = {}
 
@@ -486,10 +488,10 @@ def formatRecord(record, year, month, date_start, date_end, tier_report=False):
         rd[VO_GROUP]            = addQuotes(record[VO_GROUP])  if record[VO_GROUP]  else 'null'
         rd[VO_ROLE]             = addQuotes(record[VO_ROLE])   if record[VO_ROLE]   else 'null'
     rd[N_JOBS]              = record[N_JOBS]
-    rd[CPU_DURATION]        = int(record[CPU_DURATION])
-    rd[WALL_DURATION]       = int(record[WALL_DURATION])
-    rd[KSI2K_CPU_DURATION]  = int(record[KSI2K_CPU_DURATION])  if record[KSI2K_CPU_DURATION]  else 'null'
-    rd[KSI2K_WALL_DURATION] = int(record[KSI2K_WALL_DURATION]) if record[KSI2K_WALL_DURATION] else 'null'
+    rd[CPU_DURATION]        = int(record[CPU_DURATION]        / SECONDS_PER_HOUR)
+    rd[WALL_DURATION]       = int(record[WALL_DURATION]       / SECONDS_PER_HOUR)
+    rd[KSI2K_CPU_DURATION]  = int(record[KSI2K_CPU_DURATION]  / SECONDS_PER_HOUR) if record[KSI2K_CPU_DURATION]  else 'null'
+    rd[KSI2K_WALL_DURATION] = int(record[KSI2K_WALL_DURATION] / SECONDS_PER_HOUR) if record[KSI2K_WALL_DURATION] else 'null'
     rd[MONTH]               = month
     rd[YEAR]                = year
     rd[DATE_START]          = addQuotes(date_start)
