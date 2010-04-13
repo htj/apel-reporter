@@ -512,11 +512,11 @@ def formatRecord(record, year, month, date_start, date_end, tier_report=False):
     # proper db entry, full
     if tier_report:
         base = '''%(host)s, %(vo_name)s, ''' + \
-               '''%(n_jobs)i, %(cpu_duration)i, %(ksi2k_cpu_duration)s, %(wall_duration)i, %(ksi2k_wall_duration)s, ''' + \
+               '''%(n_jobs)i, %(cpu_duration)s, %(ksi2k_cpu_duration)s, %(wall_duration)s, %(ksi2k_wall_duration)s, ''' + \
                '''%(month)s, %(year)s, %(date_start)s, %(date_end)s'''
     else:
         base = '''%(host)s, %(vo_name)s, %(usersn)s, %(vo_group)s, %(vo_role)s, ''' + \
-               '''%(n_jobs)i, %(cpu_duration)i, %(ksi2k_cpu_duration)s, %(wall_duration)i, %(ksi2k_wall_duration)s, ''' + \
+               '''%(n_jobs)i, %(cpu_duration)s, %(ksi2k_cpu_duration)s, %(wall_duration)s, %(ksi2k_wall_duration)s, ''' + \
                '''%(month)s, %(year)s, %(date_start)s, %(date_end)s'''
 
     s = base % rd
