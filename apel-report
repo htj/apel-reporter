@@ -430,7 +430,7 @@ def mergeToTiers(records, tier_mapping, tier_shares, tier_report=False):
 
 def encryptUserSN(usersn):
 
-    cmd = './crypt'
+    cmd = './apel-crypt'
     args = [cmd, usersn]
 
     p = subprocess.Popen(args, stdout=subprocess.PIPE)
@@ -560,8 +560,8 @@ def main():
     #    print s
 
     entries = mergeToTiers(records, tier_mapping, tier_share, tier_report=tier_report)
-#    if not tier_report:
-#        entries = encryptEntries(entries)
+    if not tier_report:
+        entries = encryptEntries(entries)
 
     ent_cmp = lambda r1, r2: cmp( (r1.get(TIER), r1.get(VO_NAME), r1.get(USERSN)),
                                   (r2.get(TIER), r2.get(VO_NAME), r2.get(USERSN)) )
