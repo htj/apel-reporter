@@ -40,7 +40,6 @@ Would generate a report from the above view for december 2009.
 import sys
 import json
 import time
-import urllib
 import urlparse
 import httplib
 import calendar
@@ -85,15 +84,15 @@ FACTOR_HOST_WARNINGS = {}
 def createParser():
 
     gmt = time.gmtime()
-    d_year  = str(gmt.tm_year)
-    d_month = str(gmt.tm_mon)
+    d_year  = gmt.tm_year
+    d_month = gmt.tm_mon
 
     parser = OptionParser()
     parser.add_option('-t', '--tier',   dest='tierreport', help='Generate tier report', default=False, action='store_true')
     parser.add_option('-v', '--view',   dest='view_url',   help='Database view')
     parser.add_option('-c', '--config', dest='config',     help='Configuration file', metavar='FILE', default=CONFIG_FILE )
-    parser.add_option('-y', '--year',   dest='year',       help='Report generation year',  default=d_year)
-    parser.add_option('-m', '--month',  dest='month',      help='Report generation month', default=d_month)
+    parser.add_option('-y', '--year',   dest='year',       help='Report generation year',  default=d_year, type=int)
+    parser.add_option('-m', '--month',  dest='month',      help='Report generation month', default=d_month, type=int)
 
     return parser
 
@@ -110,18 +109,10 @@ def nMonthDays(year, month):
 
 def nextMonth(year, month):
 
-    i_year = int(year)
-    i_month = int(month)
-
     if month == 12:
-        e_year = i_year + 1
-        e_month = 1
+        return year+1, 1
     else:
-        e_year = year
-        e_month = i_month + 1
-
-    # return in string format, with 0 padded in front of month if one digit
-    return str(e_year), str(e_month) if e_month >= 10 else '0' + str(e_month)
+        return year, month+1
 
 
 
@@ -129,13 +120,12 @@ def fetchViewData(view_url, year, month):
 
     url = urlparse.urlparse(view_url)
 
-    month = month if len(month) > 1 else '0' + month
-    startkey = '["%(year)s","%(month)s"]' % {YEAR:year, MONTH:month}
     e_year, e_month = nextMonth(year, month)
-    endkey = '["%(year)s","%(month)s"]' % {YEAR: e_year, MONTH: e_month}
+    startkey = '[%(year)i,%(month)i]' % {YEAR:year,    MONTH:month}
+    endkey   = '[%(year)i,%(month)i]' % {YEAR: e_year, MONTH: e_month}
 
     path = url.path + '?group=true&startkey=%(startkey)s&endkey=%(endkey)s' % {'startkey': startkey, 'endkey': endkey}
-    # example path: '''/bio_ndgf_org/_design/apel/_view/test1?group=true&startkey=["2009","09"]&endkey=["2009","10"]'''
+    # example path: /usagerecords-2/_design/sgas/_view/coreinfo5?group=true&startkey=[2010,4]&endkey=[2010,5]
 
     conn = httplib.HTTPConnection(url.hostname, url.port)
     conn.request("GET", path)
@@ -156,7 +146,7 @@ def rowsToDicts(rows):
 
     dicts = []
     for row in rows:
-        year, month, host, usersn, vo_name, vo_issuer, vo_group, vo_role = row['key']
+        year, month, day, host, usersn, vo_issuer, vo_name, vo_group, vo_role = row['key']
         n_jobs, cpu_duration, wall_duration = row['value']
 
         d = {YEAR : year, MONTH : month, HOST : host, USERSN : usersn,
