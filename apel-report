@@ -487,10 +487,6 @@ def formatRecord(record, year, month, date_start, date_end, tier_report=False):
     rd[DATE_START]          = addQuotes(date_start)
     rd[DATE_END]            = addQuotes(date_end)
 
-    # db entry, short/debug
-#    base = '''%(host)s, %(usersn)s, %(vo_name)s, %(vo_group)s, %(vo_role)s,\n''' + \
-#           '''   %(n_jobs)i, %(cpu_duration)i, %(ksi2k_cpu_duration)s, %(wall_duration)i, %(ksi2k_wall_duration)s'''
-
     # proper db entry, full
     if tier_report:
         base = '''%(host)s, %(vo_name)s, ''' + \
@@ -555,9 +551,6 @@ def main():
 
     date_start = '%s-%s-%s' % (year, month, '1')
     date_end   = '%s-%s-%s' % (year, month, nMonthDays(year, month))
-    #for r in sorted(records):
-    #    s = formatRecord(r, year, month, date_start, date_end)
-    #    print s
 
     entries = mergeToTiers(records, tier_mapping, tier_share, tier_report=tier_report)
     if not tier_report:
