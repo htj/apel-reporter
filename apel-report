@@ -522,7 +522,7 @@ def formatRecord(record, year, month, date_start, date_end, tier_report=False):
 
 
 
-def retrieveBaseRecords(view_url, year, month, factors):
+def retrieveMonthlyRecords(view_url, year, month, factors):
 
     logging.info("Fetching data from view")
     rows = fetchViewData(view_url, year, month)
@@ -532,6 +532,33 @@ def retrieveBaseRecords(view_url, year, month, factors):
     records = filterData(records)
     records = addFactors(records, factors)
     return records
+
+
+def createReport(records, tier_report=True, tier_mapping=None, tier_share=None, encrypt=None):
+
+    if encrypt is None:
+        encrypt = tier_report
+
+    records = mergeSimilarRecords(records, tier_report=tier_report)
+    entries = mergeToTiers(records, tier_mapping, tier_share, tier_report=tier_report)
+    if encrypt:
+        entries = encryptEntries(entries)
+
+    return entries
+
+
+
+def createDatabaseStatements(db_records, year, month):
+    # only works for tier_repors so far
+    TABLE_NAME = 'SGAS_DATA'
+
+    INSERT_TEMPLATE = 'INSERT INTO SGAS_DATA VALUES (%s);'
+
+    stmts = []
+    stmts.append('DELETE FROM sgas_data WHERE year = %i AND month = %i;' % (year, month))
+    for dbr in db_records:
+        stmts.append(INSERT_TEMPLATE % dbr)
+    return stmts
 
 
 
@@ -565,25 +592,27 @@ def main():
     # we can only register tier reports to apel at the moment
     if not options.interactive:
         tier_report = True
+    encrypt = not tier_report and not options.interactive
 
     # options ready, start data fetching
 
-    base_records = retrieveBaseRecords(view_url, year, month, factors)
-
-    records = mergeSimilarRecords(base_records, tier_report=tier_report)
+    month_records = retrieveMonthlyRecords(view_url, year, month, factors)
+    entries = createReport(month_records, tier_report, tier_mapping, tier_share, encrypt)
 
     date_start = '%s-%s-%s' % (year, month, '1')
     date_end   = '%s-%s-%s' % (year, month, nMonthDays(year, month))
 
-    entries = mergeToTiers(records, tier_mapping, tier_share, tier_report=tier_report)
-    if not tier_report and not options.interactive:
-        entries = encryptEntries(entries)
-
     ent_cmp = lambda r1, r2: cmp( (r1.get(TIER), r1.get(VO_NAME), r1.get(USERSN)),
                                   (r2.get(TIER), r2.get(VO_NAME), r2.get(USERSN)) )
-    for e in sorted(entries, ent_cmp):
-        s = formatRecord(e, year, month, date_start, date_end, tier_report=tier_report)
-        print s
+    db_records = [ formatRecord(e, year, month, date_start, date_end, tier_report=tier_report) for e in sorted(entries, ent_cmp) ]
+    if options.interactive:
+        for r in db_records:
+            print r
+
+    else:
+        db_stms = createDatabaseStatements(db_records, year, month);
+        for stm in db_stms:
+            print stm
 
     logging.info('== APEL Reporter finished (normal exit)')
 
