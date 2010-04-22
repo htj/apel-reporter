@@ -42,13 +42,15 @@ import json
 import time
 import urlparse
 import httplib
+import logging
 import calendar
 import subprocess
 from optparse import OptionParser
 
 
 
-CONFIG_FILE = 'config.json'
+DEFAULT_CONFIG_FILE = 'config.json'
+DEFAULT_LOG_FILE = '/tmp/apel-reporter.log' # for development - FIXM
 
 NDGF_TIER1   = 'NDGF-T1'
 NORWAY_TIER2 = 'NO-NORGRID-T2'
@@ -88,13 +90,30 @@ def createParser():
     d_month = gmt.tm_mon
 
     parser = OptionParser()
+    parser.add_option('-i', '--interactive', dest='interactive',
+                      help='Run in interactive mode (no registrations are performed', default=False, action='store_true')
     parser.add_option('-t', '--tier',   dest='tierreport', help='Generate tier report', default=False, action='store_true')
     parser.add_option('-v', '--view',   dest='view_url',   help='Database view')
-    parser.add_option('-c', '--config', dest='config',     help='Configuration file', metavar='FILE', default=CONFIG_FILE )
+    parser.add_option('-c', '--config', dest='config',     help='Configuration file', metavar='FILE', default=DEFAULT_CONFIG_FILE )
+    parser.add_option('-l', '--logfile',dest='logfile',    help='Log file', metavar='FILE', default=DEFAULT_LOG_FILE)
     parser.add_option('-y', '--year',   dest='year',       help='Report generation year',  default=d_year, type=int)
     parser.add_option('-m', '--month',  dest='month',      help='Report generation month', default=d_month, type=int)
 
     return parser
+
+
+
+def loadConfig(filename=DEFAULT_CONFIG_FILE):
+
+    f = open(filename)
+    try:
+        cfg = json.load(f)
+    except ValueError, e:
+        logging.error("Error parsing configuration file (%s)", str(e))
+        sys.exit(2)
+
+    f.close()
+    return cfg
 
 
 
@@ -132,8 +151,8 @@ def fetchViewData(view_url, year, month):
 
     resp = conn.getresponse()
     if resp.status != 200:
-        print >> sys.stderr, 'Error fetching view data from database. Error code: %s' % resp.status
-        print >> sys.stderr, 'Message:', resp.reason
+        logging.error('Could not fetch view data from database. Error code: %s', resp.status)
+        logging.error('Message: %s', resp.reason)
         raise SystemExit()
 
     data = resp.read()
@@ -257,6 +276,7 @@ def mergeSimilarRecords(records, tier_report=False):
         else:
             # debug output
             mr = mergeRecords(recs)
+            # this is fairly complex, so we keep the debugging print logic
             if False:
                 print "MERGING:"
                 for r in recs:
@@ -276,7 +296,7 @@ def mergeSimilarRecords(records, tier_report=False):
 
 
 
-def addFactors(records, factor, factor_host_warnings=FACTOR_HOST_WARNINGS):
+def addFactors(records, factors, factor_host_warnings=FACTOR_HOST_WARNINGS):
     """
     Add factors for ksi2k scaling for cern reference.
     """
@@ -286,13 +306,13 @@ def addFactors(records, factor, factor_host_warnings=FACTOR_HOST_WARNINGS):
     UNKNOWN_FACTOR = 1.75
 
     for r in records:
-        if r[HOST] in factor:
-            r[KSI2K_CPU_DURATION] = r[CPU_DURATION] * factor[r[HOST]]
+        if r[HOST] in factors:
+            r[KSI2K_CPU_DURATION] = r[CPU_DURATION] * factors[r[HOST]]
             # ksi2k wall time - this makes no sense, but CERN want it
-            r[KSI2K_WALL_DURATION] = r[WALL_DURATION] * factor[r[HOST]]
+            r[KSI2K_WALL_DURATION] = r[WALL_DURATION] * factors[r[HOST]]
         else:
             if not r[HOST] in factor_host_warnings:
-                print >> sys.stderr, "WARNING: No factor for host %s, using %f as scale factor" % (r[HOST], UNKNOWN_FACTOR)
+                logging.warning("No scale factor for host %s, using %s", r[HOST], round(UNKNOWN_FACTOR,2))
                 factor_host_warnings[r[HOST]] = True
             r[KSI2K_CPU_DURATION] = r[CPU_DURATION] * UNKNOWN_FACTOR
             r[KSI2K_WALL_DURATION] =  r[WALL_DURATION] * UNKNOWN_FACTOR
@@ -309,7 +329,7 @@ def mergeToTiers(records, tier_mapping, tier_shares, tier_report=False):
         try:
             return tier_mapping[host]
         except KeyError:
-            print >> sys.stderr, "WARNING: No tier mapping for host %s" % host
+            logging.warning("No tier mapping for host %s", host)
         # using heuristic
         if host.endswith('.no'):
             tier = NORWAY_TIER2
@@ -445,7 +465,7 @@ def encryptEntries(entries):
     """
     Encrypts the usersn in entries, as required by APEL.
     """
-    print >> sys.stderr, "Encrypting %i entries." % len(entries)
+    logging.info('Encrypting %i entries.', len(entries))
 
     encrypted_entries = []
 
@@ -502,17 +522,16 @@ def formatRecord(record, year, month, date_start, date_end, tier_report=False):
 
 
 
-def loadConfig(filename=CONFIG_FILE):
+def retrieveBaseRecords(view_url, year, month, factors):
 
-    f = open(filename)
-    try:
-        cfg = json.load(f)
-    except ValueError, e:
-        print >> sys.stderr, "Error parsing config file (%s)" % str(e)
-        sys.exit(2)
-
-    f.close()
-    return cfg
+    logging.info("Fetching data from view")
+    rows = fetchViewData(view_url, year, month)
+    logging.info("Got view data, performing hacky data manipulation")
+    records = rowsToDicts(rows)
+    records = cleanData(records)
+    records = filterData(records)
+    records = addFactors(records, factors)
+    return records
 
 
 
@@ -522,38 +541,42 @@ def main():
     options, args = parser.parse_args()
 
     if args:
-        print >> sys.stderr, "Auxillary arguments (%s) not understood, exiting." % ','.join(args)
+        print "Auxillary arguments (%s) not understood, exiting." % ','.join(args)
         sys.exit(1)
 
+    if not options.interactive:
+        logging.basicConfig(filename=options.logfile,
+                            format='%(asctime)s %(levelname)s %(message)s',
+                            level=logging.INFO)
+        logging.info('== APEL Reporter invoked ==')
+
     cfg = loadConfig(options.config)
-    factor, tier_mapping, tier_share = cfg['factor'], cfg['tier-2'], cfg['share']
+    factors, tier_mapping, tier_share = cfg['factor'], cfg['tier-2'], cfg['share']
 
     view_url = options.view_url or cfg.get('view')
     if view_url is None:
-        print >> sys.stderr, "View url not defined in config file nor defined on command line"
+        logging.error("View url not defined in config file nor defined on command line")
         sys.exit(1)
 
     tier_report = options.tierreport
     year  = options.year
     month = options.month
 
+    # we can only register tier reports to apel at the moment
+    if not options.interactive:
+        tier_report = True
+
     # options ready, start data fetching
 
-    print >> sys.stderr, "Fetching data from view"
-    rows = fetchViewData(view_url, year, month)
-    print >> sys.stderr, "Got view data, performing hacky data manipulation"
-    records = rowsToDicts(rows)
-    records = cleanData(records)
-    records = filterData(records)
-    records = addFactors(records, factor)
+    base_records = retrieveBaseRecords(view_url, year, month, factors)
 
-    records = mergeSimilarRecords(records, tier_report=tier_report)
+    records = mergeSimilarRecords(base_records, tier_report=tier_report)
 
     date_start = '%s-%s-%s' % (year, month, '1')
     date_end   = '%s-%s-%s' % (year, month, nMonthDays(year, month))
 
     entries = mergeToTiers(records, tier_mapping, tier_share, tier_report=tier_report)
-    if not tier_report:
+    if not tier_report and not options.interactive:
         entries = encryptEntries(entries)
 
     ent_cmp = lambda r1, r2: cmp( (r1.get(TIER), r1.get(VO_NAME), r1.get(USERSN)),
@@ -562,6 +585,7 @@ def main():
         s = formatRecord(e, year, month, date_start, date_end, tier_report=tier_report)
         print s
 
+    logging.info('== APEL Reporter finished (normal exit)')
 
 
 if __name__ == '__main__':
