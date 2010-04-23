@@ -153,7 +153,7 @@ def fetchViewData(view_url, year, month):
     if resp.status != 200:
         logging.error('Could not fetch view data from database. Error code: %s', resp.status)
         logging.error('Message: %s', resp.reason)
-        raise SystemExit()
+        sys.exit(3)
 
     data = resp.read()
     response = json.loads(data)
