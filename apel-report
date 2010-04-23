@@ -555,10 +555,36 @@ def createDatabaseStatements(db_records, year, month):
     INSERT_TEMPLATE = 'INSERT INTO SGAS_DATA VALUES (%s);'
 
     stmts = []
-    stmts.append('DELETE FROM sgas_data WHERE year = %i AND month = %i;' % (year, month))
+    stmts.append('DELETE FROM SGAS_DATA WHERE year = %i AND month = %i;' % (year, month))
     for dbr in db_records:
         stmts.append(INSERT_TEMPLATE % dbr)
     return stmts
+
+
+
+def doDatabaseInsertion(statements):
+
+    import MySQLdb as mysql
+
+    connection = None
+    try:
+        connection = mysql.connect(read_default_file='~/.my.cnf-sgastest')
+        cursor = connection.cursor()
+        for stm in statements:
+            cursor.execute(stm)
+        cursor.close()
+        connection.commit()
+        logging.info('Database successfully updated. Executed %i statements', len(statements))
+
+    except mysql.Error, e:
+        logging.error("MySQL Error: %s", str(e))
+        #logging.exception(e)
+        if connection is not None:
+            connection.rollback()
+
+    finally:
+        if connection is not None:
+            connection.close()
 
 
 
@@ -610,11 +636,11 @@ def main():
             print r
 
     else:
-        db_stms = createDatabaseStatements(db_records, year, month);
-        for stm in db_stms:
-            print stm
+        statements = createDatabaseStatements(db_records, year, month);
+        logging.info('Report created, issuing update to APEL database')
+        doDatabaseInsertion(statements)
 
-    logging.info('== APEL Reporter finished (normal exit)')
+    logging.info('== APEL Reporter finished ==')
 
 
 if __name__ == '__main__':
