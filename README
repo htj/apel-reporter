@@ -1,0 +1,8 @@
+This is the NDGF APEL Reporting tool.
+
+It extracts accounting information from an SGAS coreinfo view in CouchDB, and
+builds reports for insertion into the APEL database.
+
+See the comment in the top of apel-reporter for how to use the tool. Usually
+the tool will just run via cron, but it also has an interactive mode (-i).
+
