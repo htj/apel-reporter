@@ -1,5 +1,5 @@
 {
-    "view"   : "http://localhost:7984/usagerecords-2/_design/sgas/_view/coreinfo5",
+    "view"   : "http://localhost:5984/usagerecords-2/_design/sgas/_view/coreinfo5",
 
     "factor" : {
         "jeannedarc.hpc2n.umu.se"       : 2.4175,
