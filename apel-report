@@ -50,7 +50,7 @@ from optparse import OptionParser
 
 
 DEFAULT_CONFIG_FILE = 'config.json'
-DEFAULT_LOG_FILE = '/tmp/apel-reporter.log' # for development - FIXM
+DEFAULT_LOG_FILE = '/var/log/apel-reporter.log'
 
 DAY_OVERLAP = 3  # day into a month for doing report for previous month
 
