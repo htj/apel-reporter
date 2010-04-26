@@ -52,6 +52,8 @@ from optparse import OptionParser
 DEFAULT_CONFIG_FILE = 'config.json'
 DEFAULT_LOG_FILE = '/tmp/apel-reporter.log' # for development - FIXM
 
+DAY_OVERLAP = 3  # day into a month for doing report for previous month
+
 NDGF_TIER1   = 'NDGF-T1'
 NORWAY_TIER2 = 'NO-NORGRID-T2'
 SWEDEN_TIER2 = 'SE-SNIC-T2'
@@ -81,6 +83,12 @@ SECONDS_PER_HOUR = 60 * 60
 
 # a global to avoid us spamming missing scale factors
 FACTOR_HOST_WARNINGS = {}
+
+
+ENTRY_COMPARE = lambda r1, r2: cmp(
+    (r1.get(TIER), r1.get(VO_NAME), r1.get(USERSN)),
+    (r2.get(TIER), r2.get(VO_NAME), r2.get(USERSN))
+)
 
 
 def createParser():
@@ -123,6 +131,15 @@ def nMonthDays(year, month):
         return 29
     else:
         return calendar.mdays[int(month)]
+
+
+
+def previousMonth(year, month):
+
+    if month == 1:
+        return year-1, 12
+    else:
+        return year, month-1
 
 
 
@@ -524,7 +541,7 @@ def formatRecord(record, year, month, date_start, date_end, tier_report=False):
 
 def retrieveMonthlyRecords(view_url, year, month, factors):
 
-    logging.info("Fetching data from view")
+    logging.info("Fetching data from view. Year: %i, Month %i", year, month)
     rows = fetchViewData(view_url, year, month)
     logging.info("Got view data, performing hacky data manipulation")
     records = rowsToDicts(rows)
@@ -565,10 +582,11 @@ def createDatabaseStatements(db_records, year, month):
 def doDatabaseInsertion(statements):
 
     import MySQLdb as mysql
+    logging.info('Issuing update to APEL database')
 
     connection = None
     try:
-        connection = mysql.connect(read_default_file='~/.my.cnf-sgastest')
+        connection = mysql.connect(read_default_file='~/.my.cnf-apel')
         cursor = connection.cursor()
         for stm in statements:
             cursor.execute(stm)
@@ -597,7 +615,9 @@ def main():
         print "Auxillary arguments (%s) not understood, exiting." % ','.join(args)
         sys.exit(1)
 
-    if not options.interactive:
+    if options.interactive:
+        logging.basicConfig(format='%(message)s', level=logging.INFO)
+    else:
         logging.basicConfig(filename=options.logfile,
                             format='%(asctime)s %(levelname)s %(message)s',
                             level=logging.INFO)
@@ -622,25 +642,47 @@ def main():
 
     # options ready, start data fetching
 
+    current_time = time.gmtime()
+
+    report_prev_month = not options.interactive and current_time.tm_mday <= DAY_OVERLAP
+    #report_prev_month = current_time.tm_mday <= DAY_OVERLAP
+
+    if report_prev_month:
+        logging.info('First generating report for previous month')
+        prev_year, prev_month = previousMonth(year, month)
+        prev_month_records = retrieveMonthlyRecords(view_url, prev_year, prev_month, factors)
+        prev_entries = createReport(prev_month_records, tier_report, tier_mapping, tier_share, encrypt)
+        prev_date_start = '%s-%s-%s' % (prev_year, prev_month, '1')
+        prev_date_end   = '%s-%s-%s' % (prev_year, prev_month, nMonthDays(year, month))
+        prev_db_records = [ formatRecord(e, prev_year, prev_month, prev_date_start, prev_date_end, tier_report=tier_report)
+                            for e in sorted(prev_entries, ENTRY_COMPARE) ]
+        if options.interactive:
+            for pr in prev_db_records:
+                print pr
+
     month_records = retrieveMonthlyRecords(view_url, year, month, factors)
     entries = createReport(month_records, tier_report, tier_mapping, tier_share, encrypt)
 
     date_start = '%s-%s-%s' % (year, month, '1')
-    date_end   = '%s-%s-%s' % (year, month, nMonthDays(year, month))
+    date_end   = '%s-%s-%s' % (year, month, current_time.tm_mday)
 
-    ent_cmp = lambda r1, r2: cmp( (r1.get(TIER), r1.get(VO_NAME), r1.get(USERSN)),
-                                  (r2.get(TIER), r2.get(VO_NAME), r2.get(USERSN)) )
-    db_records = [ formatRecord(e, year, month, date_start, date_end, tier_report=tier_report) for e in sorted(entries, ent_cmp) ]
+    db_records = [ formatRecord(e, year, month, date_start, date_end, tier_report=tier_report) for e in sorted(entries, ENTRY_COMPARE) ]
     if options.interactive:
         for r in db_records:
             print r
 
+    # ---
+
     else:
-        statements = createDatabaseStatements(db_records, year, month);
-        logging.info('Report created, issuing update to APEL database')
+        statements = []
+        if report_prev_month:
+            statements += createDatabaseStatements(prev_db_records, prev_year, prev_month);
+        statements += createDatabaseStatements(db_records, year, month)
+        #for s in statements: print s
         doDatabaseInsertion(statements)
 
-    logging.info('== APEL Reporter finished ==')
+    if not options.interactive:
+        logging.info('== APEL Reporter finished ==')
 
 
 if __name__ == '__main__':
