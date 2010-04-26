@@ -6,3 +6,5 @@ builds reports for insertion into the APEL database.
 See the comment in the top of apel-reporter for how to use the tool. Usually
 the tool will just run via cron, but it also has an interactive mode (-i).
 
+Requires the python mysql module (package name: python-mysqldb in ubuntu)
+
