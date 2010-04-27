@@ -635,6 +635,11 @@ def main():
     year  = options.year
     month = options.month
 
+    if not options.interactive:
+        if year < 2010 or year > 2013:
+            logging.error('Time appear to have warped at the machine. Cowardly bailing out')
+            sys.exit(4)
+
     # we can only register tier reports to apel at the moment
     if not options.interactive:
         tier_report = True
@@ -678,7 +683,10 @@ def main():
         if report_prev_month:
             statements += createDatabaseStatements(prev_db_records, prev_year, prev_month);
         statements += createDatabaseStatements(db_records, year, month)
-        #for s in statements: print s
+        # this needs to be changed once we start reporting per-user
+        logging.debug('Will issue the following %i statements')
+        for s in statements:
+            logging.info(s)
         doDatabaseInsertion(statements)
 
     if not options.interactive:
