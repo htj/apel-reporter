@@ -4,6 +4,7 @@
     "factor" : {
         "jeannedarc.hpc2n.umu.se"       : 2.4175,
         "arc-ce01.pdc.kth.se"           : 2.3025,
+        "smokerings.nsc.liu.se"         : 2.4325,
         "arc-ce.smokerings.nsc.liu.se"  : 2.4325,
         "alien-ce.smokerings.nsc.liu.se": 2.4325,
         "alice.lunarc.lu.se"            : 1.75,
@@ -28,6 +29,7 @@
         "ingrid-i.hpc2n.umu.se"         : "SE-SNIC-T2",
         "siri.lunarc.lu.se"             : "SE-SNIC-T2",
         "svea.c3se.chalmers.se"         : "SE-SNIC-T2",
+        "smokerings.nsc.liu.se"         : "SE-SNIC-T2",
         "arc-ce.smokerings.nsc.liu.se"  : "SE-SNIC-T2",
         "jeannedarc.hpc2n.umu.se"       : "SE-SNIC-T2",
         "grad1.uppmax.uu.se"            : "SE-SNIC-T2",
