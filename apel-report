@@ -27,26 +27,17 @@ Use otherconfig.json as config file.
 
 Generate tier report.
 
-./apel-report -v http://localhost:6984/bio_ndgf_org/_design/apel/_view/test1 -y 2009 -m 09
-
-Would generate a report from the above view for september 2009.
-
-./apel-report -v http://localhost:7984/usagerecords/_design/reports/_view/apel -y 2009 -m 12
-
-Would generate a report from the above view for december 2009.
-
 """
 
 import sys
 import json
 import time
-import urlparse
-import httplib
 import logging
 import calendar
 import subprocess
 from optparse import OptionParser
 
+import psycopg2
 
 
 DEFAULT_CONFIG_FILE = 'config.json'
@@ -101,7 +92,6 @@ def createParser():
     parser.add_option('-i', '--interactive', dest='interactive',
                       help='Run in interactive mode (no registrations are performed', default=False, action='store_true')
     parser.add_option('-t', '--tier',   dest='tierreport', help='Generate tier report', default=False, action='store_true')
-    parser.add_option('-v', '--view',   dest='view_url',   help='Database view')
     parser.add_option('-c', '--config', dest='config',     help='Configuration file', metavar='FILE', default=DEFAULT_CONFIG_FILE )
     parser.add_option('-l', '--logfile',dest='logfile',    help='Log file', metavar='FILE', default=DEFAULT_LOG_FILE)
     parser.add_option('-y', '--year',   dest='year',       help='Report generation year',  default=d_year, type=int)
@@ -143,51 +133,36 @@ def previousMonth(year, month):
 
 
 
-def nextMonth(year, month):
+def fetchViewData(db_host, db_name, db_username, db_password, year, month):
 
-    if month == 12:
-        return year+1, 1
-    else:
-        return year, month+1
+    query = """SELECT extract(YEAR FROM execution_time) AS year, extract(MONTH FROM execution_time) AS month,
+                    machine_name AS host, user_identity AS usersn, vo_issuer, vo_name, vo_group, vo_role,
+                    n_jobs, cputime AS cpu_duration, walltime AS wall_duration
+             FROM uraggregated
+             WHERE extract(YEAR FROM execution_time) = %s AND extract(MONTH FROM execution_time) = %s"""
+    query_args = (year, month)
 
+    conn = psycopg2.connect(host=db_host, database=db_name, user=db_username, password=db_password)
 
+    cur = conn.cursor()
+    cur.execute(query, query_args)
+    rows = cur.fetchall()
 
-def fetchViewData(view_url, year, month):
+    conn.close()
 
-    url = urlparse.urlparse(view_url)
-
-    e_year, e_month = nextMonth(year, month)
-    startkey = '[%(year)i,%(month)i]' % {YEAR:year,    MONTH:month}
-    endkey   = '[%(year)i,%(month)i]' % {YEAR: e_year, MONTH: e_month}
-
-    path = url.path + '?group=true&startkey=%(startkey)s&endkey=%(endkey)s' % {'startkey': startkey, 'endkey': endkey}
-    # example path: /usagerecords-2/_design/sgas/_view/coreinfo5?group=true&startkey=[2010,4]&endkey=[2010,5]
-
-    conn = httplib.HTTPConnection(url.hostname, url.port)
-    conn.request("GET", path)
-
-    resp = conn.getresponse()
-    if resp.status != 200:
-        logging.error('Could not fetch view data from database. Error code: %s', resp.status)
-        logging.error('Message: %s', resp.reason)
-        sys.exit(3)
-
-    data = resp.read()
-    response = json.loads(data)
-    return response['rows']
-
+    return rows
 
 
 def rowsToDicts(rows):
 
     dicts = []
     for row in rows:
-        year, month, day, host, usersn, vo_issuer, vo_name, vo_group, vo_role = row['key']
-        n_jobs, cpu_duration, wall_duration = row['value']
+        year, month, host, usersn, vo_issuer, vo_name, vo_group, vo_role, n_jobs, cpu_duration, wall_duration = row
 
-        d = {YEAR : year, MONTH : month, HOST : host, USERSN : usersn,
-             VO_NAME : vo_name, VO_ISSUER : vo_issuer, VO_GROUP : vo_group, VO_ROLE : vo_role,
-             N_JOBS : n_jobs, CPU_DURATION : cpu_duration, WALL_DURATION : wall_duration}
+        d = { YEAR : year, MONTH : month, HOST : host, USERSN : usersn,
+              VO_NAME : vo_name, VO_ISSUER : vo_issuer, VO_GROUP : vo_group, VO_ROLE : vo_role,
+              N_JOBS : n_jobs, CPU_DURATION : float(cpu_duration), WALL_DURATION : float(wall_duration)
+            }
 
         dicts.append(d)
 
@@ -539,10 +514,10 @@ def formatRecord(record, year, month, date_start, date_end, tier_report=False):
 
 
 
-def retrieveMonthlyRecords(view_url, year, month, factors):
+def retrieveMonthlyRecords(db_host, db_name, db_username, db_password, year, month, factors):
 
     logging.info("Fetching data from view. Year: %i, Month %i", year, month)
-    rows = fetchViewData(view_url, year, month)
+    rows = fetchViewData(db_host, db_name, db_username, db_password, year, month)
     logging.info("Got view data, performing hacky data manipulation")
     records = rowsToDicts(rows)
     records = cleanData(records)
@@ -626,9 +601,13 @@ def main():
     cfg = loadConfig(options.config)
     factors, tier_mapping, tier_share = cfg['factor'], cfg['tier-2'], cfg['share']
 
-    view_url = options.view_url or cfg.get('view')
-    if view_url is None:
-        logging.error("View url not defined in config file nor defined on command line")
+    db_host = cfg.get('db-host', 'localhost')
+    db_name = cfg.get('db-name', 'sgas')
+    db_username = cfg.get('db-username')
+    db_password = cfg.get('db-password')
+
+    if db_username is None or db_password is None:
+        logging.error("Database login (username and/or password) is not specified in config file.")
         sys.exit(1)
 
     tier_report = options.tierreport
@@ -637,7 +616,7 @@ def main():
 
     if not options.interactive:
         if year < 2010 or year > 2013:
-            logging.error('Time appear to have warped at the machine. Cowardly bailing out')
+            logging.error('Time appear to have warped at the machine. Cowardly bailing out.')
             sys.exit(4)
 
     # we can only register tier reports to apel at the moment
@@ -665,7 +644,7 @@ def main():
             for pr in prev_db_records:
                 print pr
 
-    month_records = retrieveMonthlyRecords(view_url, year, month, factors)
+    month_records = retrieveMonthlyRecords(db_host, db_name, db_username, db_password, year, month, factors)
     entries = createReport(month_records, tier_report, tier_mapping, tier_share, encrypt)
 
     date_start = '%s-%s-%s' % (year, month, '1')

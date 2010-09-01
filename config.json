@@ -1,5 +1,8 @@
 {
-    "view"   : "http://localhost:5984/usagerecords-2/_design/sgas/_view/coreinfo5",
+    "db-host"     : "DB-HOST-HERE",
+    "db-name"     : "DB-NAME-HERE",
+    "db-username" : "DB-USERNAME-HERE",
+    "db-password" : "DB-PASSWORD-HERE",
 
     "factor" : {
         "jeannedarc.hpc2n.umu.se"       : 2.4175,
@@ -24,6 +27,7 @@
         "grid.bccs.uib.no"              : "NO-NORGRID-T2",
         "norgrid.bccs.no"               : "NO-NORGRID-T2",
         "grid.uio.no"                   : "NO-NORGRID-T2",
+        "fimm.bccs.uib.no"              : "NO-NORGRID-T2",
 
         "ingrid-h.hpc2n.umu.se"         : "SE-SNIC-T2",
         "ingrid-i.hpc2n.umu.se"         : "SE-SNIC-T2",
@@ -45,6 +49,7 @@
 
         "alice.lunarc.lu.se"            : "SE-SNIC-T2",
         "alien-ce.smokerings.nsc.liu.se": "SE-SNIC-T2",
+        "alice-vobox.csc.fi"            : "CSC",
 
         "LUNARC"                        : "SE-SNIC-T2",
         "NSC"                           : "SE-SNIC-T2",
