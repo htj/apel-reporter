@@ -636,7 +636,7 @@ def main():
         prev_month_records = retrieveMonthlyRecords(db_host, db_name, db_username, db_password, prev_year, prev_month, factors)
         prev_entries = createReport(prev_month_records, tier_report, tier_mapping, tier_share, encrypt)
         prev_date_start = '%s-%s-%s' % (prev_year, prev_month, '1')
-        prev_date_end   = '%s-%s-%s' % (prev_year, prev_month, nMonthDays(year, month))
+        prev_date_end   = '%s-%s-%s' % (prev_year, prev_month, nMonthDays(prev_year, prev_month))
         prev_db_records = [ formatRecord(e, prev_year, prev_month, prev_date_start, prev_date_end, tier_report=tier_report)
                             for e in sorted(prev_entries, ENTRY_COMPARE) ]
         if options.interactive:
