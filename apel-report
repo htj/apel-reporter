@@ -542,7 +542,6 @@ def createReport(records, tier_report=True, tier_mapping=None, tier_share=None, 
 
 def createDatabaseStatements(db_records, year, month):
     # only works for tier_repors so far
-    TABLE_NAME = 'SGAS_DATA'
 
     INSERT_TEMPLATE = 'INSERT INTO SGAS_DATA VALUES (%s);'
 
