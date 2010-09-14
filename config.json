@@ -62,7 +62,8 @@
         [{"tier": "NO-NORGRID-T2", "vo_name": "alice"}                         , 0   ],
         [{"tier": "SE-SNIC-T2",    "vo_name": "atlas", "vo_role": "production"}, 0.49],
         [{"tier": "SE-SNIC-T2",    "vo_name": "alice"}                         , 0.49],
-        [{"tier": "CSC",           "vo_name": "cms"}                           , 1]
+        [{"tier": "CSC",           "vo_name": "cms"}                           , 1],
+        [{"tier": "CSC",           "vo_name": "alice"}                         , 0]
     ]
 
 }
