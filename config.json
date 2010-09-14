@@ -41,6 +41,7 @@
         "grad.uppmax.uu.se"             : "SE-SNIC-T2",
 
         "fyrgrid.grid.aau.dk"           : "NDGF-T1",
+        "gateway01.dcsc.ku.dk"          : "NDGF-T1",
 
         "sepeli.csc.fi"                 : "CSC",
         "ametisti.grid.helsinki.fi"     : "CSC",
