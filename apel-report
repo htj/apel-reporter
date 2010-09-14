@@ -186,6 +186,14 @@ def cleanData(records):
             record[VO_NAME] = 'alice'
             record[USERSN]  = 'aliprod'
 
+        # some users have atlas.cern.ch vo, which is not directly wrong but not right either
+        # these are mostly non-andrej users so we put them in user if they have no role
+        # I think these are actually non-voms users, but which comes with a reverse vo mapping
+        if record[VO_NAME] == 'atlas.cern.ch' and record[VO_ISSUER].startswith('vomss://voms.cern.ch:8443/voms/atlas'):
+            record[VO_NAME] = 'atlas'
+            if record[VO_ROLE] is None:
+                record[VO_ROLE] = 'user'
+
         # hack for missing vo info on Andrej - turn them into production jobs which is probably 99% right
         if record[USERSN] == '/C=SI/O=SiGNET/O=IJS/OU=F9/CN=Andrej Filipcic' and \
            record[VO_ISSUER] == None and \
@@ -208,7 +216,7 @@ def filterData(records):
     def isInteresting(record):
         if record[VO_ISSUER] in ('/DC=ch/DC=cern/OU=computers/CN=voms.cern.ch', '/DC=ch/DC=cern/OU=computers/CN=lcg-voms.cern.ch'):
             return True
-        if record[VO_NAME] in ('atlas', 'cms', 'alice', 'atlas.cern.ch', 'alice.cern.ch'):
+        if record[VO_NAME] in ('atlas', 'cms', 'alice'):
             return True
         if record[USERSN] == '/C=SI/O=SiGNET/O=IJS/OU=F9/CN=Andrej Filipcic':
             return True
