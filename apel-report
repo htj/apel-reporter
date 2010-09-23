@@ -188,11 +188,13 @@ def cleanData(records):
 
         # some users have atlas.cern.ch vo, which is not directly wrong but not right either
         # these are mostly non-andrej users so we put them in user if they have no role
-        # I think these are actually non-voms users, but which comes with a reverse vo mapping
+        # these are actually non-voms users, but which comes with a reverse vo mapping
+        # this is all heuristics
         if record[VO_NAME] == 'atlas.cern.ch' and record[VO_ISSUER].startswith('vomss://voms.cern.ch:8443/voms/atlas'):
             record[VO_NAME] = 'atlas'
-            if record[VO_ROLE] is None:
-                record[VO_ROLE] = 'user'
+            if record[USERSN] == '/C=SI/O=SiGNET/O=IJS/OU=F9/CN=Andrej Filipcic':
+                record[VO_GROUP] = 'atlas'
+                record[VO_ROLE] = 'production'
 
         # hack for missing vo info on Andrej - turn them into production jobs which is probably 99% right
         if record[USERSN] == '/C=SI/O=SiGNET/O=IJS/OU=F9/CN=Andrej Filipcic' and \
@@ -298,15 +300,14 @@ def addFactors(records, factors, factor_host_warnings=FACTOR_HOST_WARNINGS):
     """
     Add factors for ksi2k scaling for cern reference.
     """
-    # note: the magic factor for converting specint2000 factors to
-    # ksi2k factors is 4.0
+    # note: the magic factor for converting ksi2k factors to
+    # hs06 factors is to multiply with 4, i.e., ksi2k*4 = hs06
 
     UNKNOWN_FACTOR = 1.75
 
     for r in records:
         if r[HOST] in factors:
             r[KSI2K_CPU_DURATION] = r[CPU_DURATION] * factors[r[HOST]]
-            # ksi2k wall time - this makes no sense, but CERN want it
             r[KSI2K_WALL_DURATION] = r[WALL_DURATION] * factors[r[HOST]]
         else:
             if not r[HOST] in factor_host_warnings:
@@ -473,6 +474,8 @@ def encryptEntries(entries):
         encrypted_entries.append(ec)
         sys.stdout.write('.')
         sys.stdout.flush()
+    sys.stdout.write('\n')
+    sys.stdout.flush()
 
     return encrypted_entries
 
@@ -546,15 +549,24 @@ def createReport(records, tier_report=True, tier_mapping=None, tier_share=None, 
 
 
 
-def createDatabaseStatements(db_records, year, month):
+def createDatabaseStatements(db_records, year, month, tier_report=True):
     # only works for tier_repors so far
 
-    INSERT_TEMPLATE = 'INSERT INTO SGAS_DATA VALUES (%s);'
+    TIER_INSERT_TEMPLATE = 'INSERT INTO SGAS_DATA VALUES (%s);'
+    TIER_DELETE_TEMPLATE = 'DELETE FROM SGAS_DATA WHERE year = %i AND month = %i;'
+
+    USER_INSERT_TEMPLATE = 'INSERT INTO SGAS_DATA_USER VALUES (%s);'
+    USER_DELETE_TEMPLATE = 'DELETE FROM SGAS_DATA_USER WHERE year = %i AND month = %i;' 
 
     stmts = []
-    stmts.append('DELETE FROM SGAS_DATA WHERE year = %i AND month = %i;' % (year, month))
-    for dbr in db_records:
-        stmts.append(INSERT_TEMPLATE % dbr)
+    if tier_report:
+        stmts.append(TIER_DELETE_TEMPLATE % (year, month))
+        for dbr in db_records:
+            stmts.append(TIER_INSERT_TEMPLATE % dbr)
+    else:
+        stmts.append(USER_DELETE_TEMPLATE % (year, month))
+        for dbr in db_records:
+            stmts.append(USER_INSERT_TEMPLATE % dbr)
     return stmts
 
 
@@ -624,7 +636,7 @@ def main():
             logging.error('Time appear to have warped at the machine. Cowardly bailing out.')
             sys.exit(4)
 
-    # we can only register tier reports to apel at the moment
+    # currently we only register tier-aggregate numbers
     if not options.interactive:
         tier_report = True
     encrypt = not tier_report and not options.interactive
@@ -633,8 +645,7 @@ def main():
 
     current_time = time.gmtime()
 
-    report_prev_month = not options.interactive and current_time.tm_mday <= DAY_OVERLAP
-    #report_prev_month = current_time.tm_mday <= DAY_OVERLAP
+    report_prev_month = (not options.interactive) and current_time.tm_mday <= DAY_OVERLAP
 
     if report_prev_month:
         logging.info('First generating report for previous month')
@@ -645,9 +656,6 @@ def main():
         prev_date_end   = '%s-%s-%s' % (prev_year, prev_month, nMonthDays(prev_year, prev_month))
         prev_db_records = [ formatRecord(e, prev_year, prev_month, prev_date_start, prev_date_end, tier_report=tier_report)
                             for e in sorted(prev_entries, ENTRY_COMPARE) ]
-        if options.interactive:
-            for pr in prev_db_records:
-                print pr
 
     month_records = retrieveMonthlyRecords(db_host, db_name, db_username, db_password, year, month, factors)
     entries = createReport(month_records, tier_report, tier_mapping, tier_share, encrypt)
@@ -665,9 +673,9 @@ def main():
     else:
         statements = []
         if report_prev_month:
-            statements += createDatabaseStatements(prev_db_records, prev_year, prev_month);
-        statements += createDatabaseStatements(db_records, year, month)
-        # this needs to be changed once we start reporting per-user
+            statements += createDatabaseStatements(prev_db_records, prev_year, prev_month, tier_report=tier_report);
+        statements += createDatabaseStatements(db_records, year, month, tier_report=tier_report)
+        # this should probably be changed, log is quite difficult to read
         logging.debug('Will issue the following %i statements')
         for s in statements:
             logging.info(s)
