@@ -184,7 +184,9 @@ def cleanData(records):
             record[VO_NAME] = None
         if record[USERSN].startswith(ALIEN_USER_PREFIX):
             record[VO_NAME] = 'alice'
-            record[USERSN]  = 'aliprod'
+            record[USERSN]  = '/aliprod'
+        if record[USERSN] =='aliprod':
+            record[USERSN]  = '/aliprod'
 
         # some users have atlas.cern.ch vo, which is not directly wrong but not right either
         # these are mostly non-andrej users so we put them in user if they have no role
@@ -222,7 +224,7 @@ def filterData(records):
             return True
         if record[USERSN] == '/C=SI/O=SiGNET/O=IJS/OU=F9/CN=Andrej Filipcic':
             return True
-        if record[USERSN] == 'aliprod':
+        if record[USERSN] in ('aliprod', '/aliprod'):
             return True
         if record[USERSN].startswith(ALIEN_USER_PREFIX):
             return True
@@ -495,9 +497,9 @@ def formatRecord(record, year, month, date_start, date_end, tier_report=False):
     rd[VO_NAME]             = addQuotes(record[VO_NAME])   if record[VO_NAME]   else 'null'
     if not tier_report:
         rd[USERSN]              = addQuotes(record[USERSN])
-        rd[VO_ISSUER]           = addQuotes(record[VO_ISSUER]) if record[VO_ISSUER] else 'null'
-        rd[VO_GROUP]            = addQuotes(record[VO_GROUP])  if record[VO_GROUP]  else 'null'
-        rd[VO_ROLE]             = addQuotes(record[VO_ROLE])   if record[VO_ROLE]   else 'null'
+        rd[VO_ISSUER]           = addQuotes(record[VO_ISSUER]) if record[VO_ISSUER] else "''"
+        rd[VO_GROUP]            = addQuotes(record[VO_GROUP])  if record[VO_GROUP]  else "''"
+        rd[VO_ROLE]             = addQuotes(record[VO_ROLE])   if record[VO_ROLE]   else "''"
     rd[N_JOBS]              = record[N_JOBS]
     rd[CPU_DURATION]        = int(record[CPU_DURATION])
     rd[WALL_DURATION]       = int(record[WALL_DURATION])
@@ -636,9 +638,6 @@ def main():
             logging.error('Time appear to have warped at the machine. Cowardly bailing out.')
             sys.exit(4)
 
-    # currently we only register tier-aggregate numbers
-    if not options.interactive:
-        tier_report = True
     encrypt = not tier_report and not options.interactive
 
     # options ready, start data fetching
