@@ -17,7 +17,8 @@
         "ce02.titan.uio.no"             : 2.7425,
         "sepeli.csc.fi"                 : 1.93,
         "jade-cms.hip.fi"               : 2.5675,
-        "korundi.grid.helsinki.fi"      : 2.78
+        "korundi.grid.helsinki.fi"      : 2.78,
+        "gateway01.dcsc.ku.dk"          : 2.02
     },
 
     "tier-2" : {
