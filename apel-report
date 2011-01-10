@@ -659,8 +659,14 @@ def main():
     month_records = retrieveMonthlyRecords(db_host, db_name, db_username, db_password, year, month, factors)
     entries = createReport(month_records, tier_report, tier_mapping, tier_share, encrypt)
 
+    # if reporting for a month in the past, use the last day of the month 
+    if current_time.tm_year == year and current_time.tm_mon == month:
+    	day = current_time.tm_mday
+    else:
+        day = nMonthDays(year, month)
+
     date_start = '%s-%s-%s' % (year, month, '1')
-    date_end   = '%s-%s-%s' % (year, month, current_time.tm_mday)
+    date_end   = '%s-%s-%s' % (year, month, day)
 
     db_records = [ formatRecord(e, year, month, date_start, date_end, tier_report=tier_report) for e in sorted(entries, ENTRY_COMPARE) ]
     if options.interactive:
