@@ -677,7 +677,7 @@ def main():
         # this should probably be changed, log is quite difficult to read
         logging.debug('Will issue the following %i statements')
         for s in statements:
-            logging.info(s)
+            logging.debug(s)
         doDatabaseInsertion(statements)
 
     if not options.interactive:
