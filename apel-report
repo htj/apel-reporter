@@ -48,7 +48,7 @@ DAY_OVERLAP = 3  # day into a month for doing report for previous month
 NDGF_TIER1   = 'NDGF-T1'
 NORWAY_TIER2 = 'NO-NORGRID-T2'
 SWEDEN_TIER2 = 'SE-SNIC-T2'
-CSC_TIER     = 'CSC' # this is apparently what it is called
+FINLAND_TIER2 = 'FI_HIP_T2'
 
 ALIEN_USER_PREFIX = '/C=ch/O=AliEn/OU=ALICE/'
 
@@ -337,7 +337,7 @@ def mergeToTiers(records, tier_mapping, tier_shares, tier_report=False):
         elif host.endswith('.se'):
             tier = SWEDEN_TIER2
         elif host.endswith('.fi'):
-            tier = CSC_TIER
+            tier = FINLAND_TIER2
         else:
             tier = DEFAULT_TIER
         return tier
